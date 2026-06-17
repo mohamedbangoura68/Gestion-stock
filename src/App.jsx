@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 
+// ─── ⚠️ MIGRATION SUPABASE REQUISE ───────────────────────────────────────────
+// Pour activer les "onglets personnalisés par utilisateur", ajoutez une colonne
+// à la table app_users dans Supabase (SQL Editor) :
+//   ALTER TABLE app_users ADD COLUMN custom_nav jsonb DEFAULT NULL;
+// custom_nav = NULL  → l'utilisateur suit les permissions par défaut de son rôle
+// custom_nav = ["dashboard","sales",...] → liste personnalisée qui remplace le rôle
+
+
 // ─── DONNÉES INITIALES ────────────────────────────────────────────────────────
 const INITIAL_PRODUCTS = [
   { name: "Ciment Portland CPA", ref: "CIM-001", category: "Ciment", subcategory: "CPA 42.5", buy_price: 85000, sell_price: 95000, qty: 250, alert: 50, unit: "Sac 50kg", supplier: "CIMAF Guinée", image: "🏗️" },
@@ -54,14 +62,25 @@ const PERMISSIONS = {
     delete: ["products"],
   },
 };
-const canAccess = (role, page) => (PERMISSIONS[role]?.nav || []).includes(page);
+// canAccess accepte soit un rôle (string) soit un objet user complet.
+// Si l'utilisateur a des onglets personnalisés (custom_nav non vide), ceux-ci
+// remplacent la liste par défaut du rôle. Sinon on retombe sur les permissions du rôle.
+const canAccess = (roleOrUser, page) => {
+  if (roleOrUser && typeof roleOrUser === "object") {
+    if (Array.isArray(roleOrUser.custom_nav) && roleOrUser.custom_nav.length > 0) {
+      return roleOrUser.custom_nav.includes(page);
+    }
+    return (PERMISSIONS[roleOrUser.role]?.nav || []).includes(page);
+  }
+  return (PERMISSIONS[roleOrUser]?.nav || []).includes(page);
+};
 const canWrite  = (role, page) => (PERMISSIONS[role]?.write || []).includes(page);
 const canDelete = (role, page) => (PERMISSIONS[role]?.delete || []).includes(page);
 
 // ─── THÈMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
   dark:  { bg:"#111111", sidebar:"#0f0f0f", card:"#1a1a1a", cardBorder:"rgba(255,255,255,0.07)", text:"#ffffff", textSub:"#9ca3af", textMuted:"#6b7280", input:"rgba(255,255,255,0.06)", inputBorder:"rgba(255,255,255,0.1)", headerBg:"#0f0f0f", headerBorder:"rgba(255,255,255,0.06)", navActive:"linear-gradient(135deg,rgba(249,115,22,0.2),rgba(249,115,22,0.1))", navActiveBorder:"#f97316", navText:"#6b7280", rowHover:"rgba(255,255,255,0.03)", tableHead:"rgba(255,255,255,0.04)", userCard:"rgba(255,255,255,0.04)", accent:"#f97316", name:"Sombre", optionBg:"#1e1e1e", optionColor:"#e5e7eb" },
-  light: { bg:"#F4F4F4", sidebar:"#191919", card:"#FFEAE5", cardBorder:"rgba(0,0,0,0.07)", text:"#0f172a", textSub:"#FB1A1A", textMuted:"#F76B00", input:"rgba(0,0,0,0.04)", inputBorder:"rgba(0,0,0,0.12)", headerBg:"#EBE7E7", headerBorder:"rgba(0,0,0,0.08)", navActive:"linear-gradient(135deg,rgba(249,115,22,0.12),rgba(249,115,22,0.06))", navActiveBorder:"#f97316", navText:"#64748b", rowHover:"rgba(0,0,0,0.02)", tableHead:"rgba(0,0,0,0.03)", userCard:"rgba(0,0,0,0.03)", accent:"#f97316", name:"Clair", optionBg:"#ffffff", optionColor:"#0f172a" },
+  light: { bg:"#F4F4F4", sidebar:"#191919", card:"#ffffff", cardBorder:"rgba(0,0,0,0.07)", text:"#0f172a", textSub:"#FB1A1A", textMuted:"#F76B00", input:"rgba(0,0,0,0.04)", inputBorder:"rgba(0,0,0,0.12)", headerBg:"#EBE7E7", headerBorder:"rgba(0,0,0,0.08)", navActive:"linear-gradient(135deg,rgba(249,115,22,0.12),rgba(249,115,22,0.06))", navActiveBorder:"#f97316", navText:"#64748b", rowHover:"rgba(0,0,0,0.02)", tableHead:"rgba(0,0,0,0.03)", userCard:"rgba(0,0,0,0.03)", accent:"#f97316", name:"Clair", optionBg:"#ffffff", optionColor:"#0f172a" },
   blue:  { bg:"#0f172a", sidebar:"#0a1628", card:"#1e293b", cardBorder:"rgba(148,163,184,0.1)", text:"#f1f5f9", textSub:"#94a3b8", textMuted:"#64748b", input:"rgba(148,163,184,0.08)", inputBorder:"rgba(148,163,184,0.15)", headerBg:"#0a1628", headerBorder:"rgba(148,163,184,0.1)", navActive:"linear-gradient(135deg,rgba(59,130,246,0.2),rgba(59,130,246,0.1))", navActiveBorder:"#3b82f6", navText:"#64748b", rowHover:"rgba(148,163,184,0.04)", tableHead:"rgba(148,163,184,0.06)", userCard:"rgba(148,163,184,0.06)", accent:"#3b82f6", name:"Océan", optionBg:"#1e293b", optionColor:"#f1f5f9" },
   green: { bg:"#0a1a0f", sidebar:"#061209", card:"#0f2018", cardBorder:"rgba(34,197,94,0.1)", text:"#f0fdf4", textSub:"#86efac", textMuted:"#4ade80", input:"rgba(34,197,94,0.06)", inputBorder:"rgba(34,197,94,0.15)", headerBg:"#061209", headerBorder:"rgba(34,197,94,0.1)", navActive:"linear-gradient(135deg,rgba(34,197,94,0.2),rgba(34,197,94,0.1))", navActiveBorder:"#22c55e", navText:"#4ade80", rowHover:"rgba(34,197,94,0.03)", tableHead:"rgba(34,197,94,0.06)", userCard:"rgba(34,197,94,0.06)", accent:"#22c55e", name:"Forêt", optionBg:"#0f2018", optionColor:"#f0fdf4" },
 };
@@ -185,21 +204,24 @@ const AccessDenied = ({ T, role }) => (
   </div>
 );
 
-const StatCard = ({ label, value, icon, color, sub, T }) => (
-  <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: T.card, border: `1px solid ${T.cardBorder}` }}>
-    <div className="absolute top-0 right-0 w-24 h-24 rounded-full -mr-8 -mt-8 opacity-10" style={{ background: color }} />
-    <div className="flex items-start justify-between">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: T.textMuted }}>{label}</p>
-        <p className="text-2xl font-black mt-1" style={{ color: T.text }}>{value}</p>
-        {sub && <p className="text-xs mt-1" style={{ color }}>{sub}</p>}
-      </div>
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}20`, color }}>
-        <Icon name={icon} size={20} />
+const StatCard = ({ label, value, icon, color, sub, T, themeName }) => {
+  const isLight = themeName === "light";
+  return (
+    <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: isLight ? `${color}14` : T.card, border: `1px solid ${isLight ? `${color}40` : T.cardBorder}` }}>
+      <div className="absolute top-0 right-0 w-24 h-24 rounded-full -mr-8 -mt-8 opacity-10" style={{ background: color }} />
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider" style={{ color: T.textMuted }}>{label}</p>
+          <p className="text-2xl font-black mt-1" style={{ color: isLight ? color : T.text }}>{value}</p>
+          {sub && <p className="text-xs mt-1" style={{ color }}>{sub}</p>}
+        </div>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}20`, color }}>
+          <Icon name={icon} size={20} />
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const MiniBar = ({ data, color }) => {
   const max = Math.max(...data.map(d => d.v), 1);
@@ -268,7 +290,7 @@ const LoginPage = ({ onLogin }) => {
     if (err || !data) { setError("Email introuvable ou compte désactivé."); setLoading(false); return; }
     if (data.password !== password) { setError("Mot de passe incorrect."); setLoading(false); return; }
     await supabase.from("app_users").update({ last_login: new Date().toISOString() }).eq("id", data.id);
-    onLogin({ id: data.id, name: data.name, role: data.role, email: data.email });
+    onLogin({ id: data.id, name: data.name, role: data.role, email: data.email, custom_nav: data.custom_nav || null });
   };
 
   return (
@@ -321,7 +343,7 @@ const LoginPage = ({ onLogin }) => {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-const Dashboard = ({ products, sales, clients, expenses, T, user, shopSettings }) => {
+const Dashboard = ({ products, sales, clients, expenses, T, user, shopSettings, themeName }) => {
   const role = user.role;
   const isAdmin = role === "Administrateur";
   const today = localDateStr();
@@ -353,14 +375,14 @@ const Dashboard = ({ products, sales, clients, expenses, T, user, shopSettings }
       )}
       {/* Stats visibles selon le rôle */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {canAccess(role,"sales") && <StatCard label="CA Aujourd'hui" value={fmtGNF(todaySales)} icon="chart" color="#f97316" T={T}/>}
-        {canAccess(role,"sales") && <StatCard label="CA du mois" value={fmtGNF(monthSales)} icon="sales" color="#22c55e" T={T}/>}
-        {isAdmin && <StatCard label="Bénéfice estimé" value={fmtGNF(monthSales*0.15)} icon="accounting" color="#3b82f6" sub="Marge 15%" T={T}/>}
-        {isAdmin && <StatCard label="Dettes clients" value={fmtGNF(totalDebt)} icon="clients" color="#f59e0b" T={T}/>}
-        {canAccess(role,"products") && <StatCard label="Produits" value={products.length} icon="products" color="#8b5cf6" T={T}/>}
-        {canAccess(role,"stock") && <StatCard label="Stock faible" value={lowStock.length} icon="warning" color="#ef4444" T={T}/>}
-        {canAccess(role,"clients") && <StatCard label="Clients" value={clients.length} icon="clients" color="#06b6d4" T={T}/>}
-        {isAdmin && <StatCard label="Dépenses" value={fmtGNF(totalExpenses)} icon="expenses" color="#ec4899" T={T}/>}
+        {canAccess(user,"sales") && <StatCard label="CA Aujourd'hui" value={fmtGNF(todaySales)} icon="chart" color="#f97316" T={T} themeName={themeName}/>}
+        {canAccess(user,"sales") && <StatCard label="CA du mois" value={fmtGNF(monthSales)} icon="sales" color="#22c55e" T={T} themeName={themeName}/>}
+        {isAdmin && <StatCard label="Bénéfice estimé" value={fmtGNF(monthSales*0.15)} icon="accounting" color="#3b82f6" sub="Marge 15%" T={T} themeName={themeName}/>}
+        {isAdmin && <StatCard label="Dettes clients" value={fmtGNF(totalDebt)} icon="clients" color="#f59e0b" T={T} themeName={themeName}/>}
+        {canAccess(user,"products") && <StatCard label="Produits" value={products.length} icon="products" color="#8b5cf6" T={T} themeName={themeName}/>}
+        {canAccess(user,"stock") && <StatCard label="Stock faible" value={lowStock.length} icon="warning" color="#ef4444" T={T} themeName={themeName}/>}
+        {canAccess(user,"clients") && <StatCard label="Clients" value={clients.length} icon="clients" color="#06b6d4" T={T} themeName={themeName}/>}
+        {isAdmin && <StatCard label="Dépenses" value={fmtGNF(totalExpenses)} icon="expenses" color="#ec4899" T={T} themeName={themeName}/>}
       </div>
       {isAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -374,7 +396,7 @@ const Dashboard = ({ products, sales, clients, expenses, T, user, shopSettings }
           </div>
         </div>
       )}
-      {canAccess(role,"sales") && (
+      {canAccess(user,"sales") && (
         <div className="rounded-2xl p-5" style={{background:T.card,border:`1px solid ${T.cardBorder}`}}>
           <h3 className="text-sm font-bold mb-4" style={{color:T.text}}>Dernières ventes</h3>
           <div className="space-y-2">
@@ -644,6 +666,7 @@ const SalesPage = ({ products, setProducts, sales, setSales, clients, setClients
   const [amountPaid, setAmountPaid] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showInvoice, setShowInvoice] = useState(null);
+  const [showDevis, setShowDevis] = useState(null);
   const [detailSale, setDetailSale] = useState(null); // modal "Voir plus"
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -705,6 +728,29 @@ const SalesPage = ({ products, setProducts, sales, setSales, clients, setClients
 
     setShowInvoice(data[0]);
     setCart([]); setSelectedClient(""); setDiscount(0); setAmountPaid(""); setSaving(false);
+  };
+
+  // Génère un devis (état estimatif) à partir du panier actuel.
+  // Contrairement à validateSale : aucune écriture en base, aucune mise à jour
+  // du stock ni de la dette client. Le panier reste intact pour permettre de
+  // poursuivre vers une vraie vente si le client accepte le devis.
+  const makeDevis = () => {
+    if (cart.length === 0) { setErrMsg("Le panier est vide."); return; }
+    setErrMsg("");
+    let num = 1;
+    try {
+      num = (parseInt(localStorage.getItem("bfy_devis_counter") || "0", 10) || 0) + 1;
+      localStorage.setItem("bfy_devis_counter", String(num));
+    } catch {}
+    setShowDevis({
+      num,
+      date: localDateStr(),
+      client: selectedClient || "Client comptoir",
+      items: cart.map(i => ({ product: i.name, qty: i.qty, price: i.sell_price || 0 })),
+      total,
+      discount,
+      seller_name: user?.name || "Inconnu",
+    });
   };
 
   return (
@@ -808,11 +854,18 @@ const SalesPage = ({ products, setProducts, sales, setSales, clients, setClients
             )}
           </div>
 
-          {write&&<Btn onClick={validateSale} variant="success" className="w-full justify-center" T={T}>
-            <span className="flex items-center justify-center gap-2">
-              <Icon name="check" size={15}/>{saving?"Enregistrement...":"Valider la vente"}
-            </span>
-          </Btn>}
+          {write&&(
+            <div className="flex gap-2">
+              <Btn onClick={makeDevis} variant="ghost" className="flex-1 justify-center" T={T} disabled={cart.length===0}>
+                <span className="flex items-center justify-center gap-2">📄 Devis</span>
+              </Btn>
+              <Btn onClick={validateSale} variant="success" className="flex-1 justify-center" T={T} disabled={saving}>
+                <span className="flex items-center justify-center gap-2">
+                  <Icon name="check" size={15}/>{saving?"Enregistrement...":"Valider la vente"}
+                </span>
+              </Btn>
+            </div>
+          )}
         </div>
       </div>
 
@@ -942,6 +995,143 @@ const SalesPage = ({ products, setProducts, sales, setSales, clients, setClients
     <div class="foot-left">
       <div class="merci">Merci pour votre confiance !</div>
       <div class="note">Tout article vendu n'est ni repris ni échangé.</div>
+    </div>
+    <div class="foot-right">
+      <div class="sig-line"></div>
+      <div>Signature &amp; Cachet</div>
+    </div>
+  </div>
+</div></body></html>`;
+                const w=window.open("","_blank","width=800,height=1000");
+                w.document.open();w.document.write(html);w.document.close();
+                w.focus();setTimeout(()=>w.print(),450);
+              }}>
+                <span className="flex items-center justify-center gap-1"><Icon name="print" size={14}/> Imprimer</span>
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Devis ── */}
+      {showDevis&&(
+        <Modal title="Devis" onClose={()=>setShowDevis(null)} T={T}>
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto text-2xl" style={{background:`${T.accent}22`}}>📄</div>
+            <p className="font-black text-xl" style={{color:T.text}}>{shopName}</p>
+            <p className="font-bold" style={{color:T.accent}}>Devis N° {String(showDevis.num).padStart(4,"0")}</p>
+            <div className="rounded-xl p-4 text-left space-y-2" style={{background:T.rowHover,border:`1px solid ${T.cardBorder}`}}>
+              <div className="flex justify-between items-center">
+                <p className="text-xs font-bold uppercase tracking-wider" style={{color:T.textMuted}}>Devis N° {String(showDevis.num).padStart(4,"0")}</p>
+                <p className="text-xs" style={{color:T.textMuted}}>{showDevis.date}</p>
+              </div>
+              <p className="font-semibold text-sm" style={{color:T.text}}>👤 {showDevis.client}</p>
+              {showDevis.seller_name&&<p className="text-xs" style={{color:T.textMuted}}>Établi par : {showDevis.seller_name}</p>}
+              <div className="border-t my-2" style={{borderColor:T.cardBorder}}/>
+              {(showDevis.items||[]).map((i,idx)=>(
+                <div key={idx} className="flex justify-between text-sm">
+                  <span style={{color:T.textMuted}}>{i.product} × {i.qty}</span>
+                  <span style={{color:T.text}}>{fmtGNF(i.price*i.qty)}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2 mt-1 space-y-1" style={{borderColor:T.cardBorder}}>
+                <div className="flex justify-between font-black text-sm"><span style={{color:T.text}}>Total estimé</span><span style={{color:T.accent}}>{fmtGNF(showDevis.total)}</span></div>
+              </div>
+            </div>
+            <p className="text-xs" style={{color:T.textMuted}}>⚠️ Ce devis est une estimation. Il ne constitue pas une facture et n'enregistre aucune vente ni mouvement de stock.</p>
+            <div className="flex gap-3">
+              <Btn onClick={()=>setShowDevis(null)} variant="ghost" T={T} className="flex-1">Fermer</Btn>
+              <Btn T={T} className="flex-1" onClick={()=>{
+                const inv=showDevis;
+                const sName=shopName;
+                const lignes=(inv.items||[]).map((it,i)=>`
+                  <tr style="background:${i%2===0?"#fafafa":"#fff"}">
+                    <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#1a1a1a;">${it.product}</td>
+                    <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:13px;color:#555;">${it.qty}</td>
+                    <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:13px;color:#555;">${fmtGNF(it.price)}</td>
+                    <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:13px;font-weight:700;color:#1a1a1a;">${fmtGNF(it.price*it.qty)}</td>
+                  </tr>`).join("");
+                const today=new Date();
+                const validUntil=new Date(today.getTime()+15*24*60*60*1000);
+                const validStr=localDateStr(validUntil);
+                const html=`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/>
+<title>Devis N°${String(inv.num).padStart(4,"0")} — ${sName}</title>
+<style>
+  @page{margin:16mm 14mm}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a;font-size:13px}
+  .wrap{max-width:720px;margin:0 auto;padding:0}
+  /* EN-TETE */
+  .top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid #f97316;margin-bottom:22px}
+  .brand-name{font-size:26px;font-weight:900;color:#f97316;letter-spacing:1px;margin-bottom:2px}
+  .brand-sub{font-size:11px;color:#999}
+  .inv-block{text-align:right}
+  .inv-num{font-size:20px;font-weight:900;color:#111;margin-bottom:3px}
+  .inv-meta{font-size:11px;color:#888;line-height:1.8}
+  .badge{display:inline-block;padding:3px 14px;border-radius:20px;font-size:11px;font-weight:700;background:#fef3c7;color:#b45309;margin-top:6px}
+  /* PARTIES */
+  .parties{display:flex;gap:16px;margin-bottom:22px}
+  .pbox{flex:1;border:1px solid #eee;border-radius:10px;padding:13px 15px;background:#fafafa}
+  .plabel{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#f97316;margin-bottom:5px}
+  .pname{font-size:14px;font-weight:800;color:#111;margin-bottom:2px}
+  .psub{font-size:11px;color:#777}
+  /* TABLEAU */
+  table{width:100%;border-collapse:collapse;margin-bottom:18px;border:1px solid #eee;border-radius:8px;overflow:hidden}
+  thead tr{background:#f97316}
+  thead th{padding:10px 14px;color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left}
+  thead th:nth-child(2){text-align:center}
+  thead th:nth-child(3),thead th:nth-child(4){text-align:right}
+  /* TOTAUX */
+  .tot-wrap{display:flex;justify-content:flex-end;margin-bottom:10px}
+  .tot{width:255px;border:1px solid #eee;border-radius:10px;overflow:hidden}
+  .tot-grand{background:#fff8f3;padding:11px 14px;display:flex;justify-content:space-between;font-size:16px;font-weight:900;color:#f97316}
+  .validity{text-align:right;font-size:11px;color:#b45309;font-weight:700;margin-bottom:26px}
+  /* PIED */
+  .foot{border-top:1px solid #eee;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-end}
+  .foot-left .merci{font-size:14px;font-weight:800;color:#f97316}
+  .foot-left .note{font-size:10px;color:#aaa;margin-top:3px;max-width:400px;line-height:1.5}
+  .foot-right{text-align:right;font-size:11px;color:#aaa}
+  .sig-line{width:150px;border-top:1px solid #ccc;margin-top:30px;margin-left:auto}
+</style></head><body><div class="wrap">
+  <div class="top">
+    <div>
+      <div class="brand-name">${sName}</div>
+      <div class="brand-sub">Vente de matériaux de construction · Conakry, Guinée</div>
+    </div>
+    <div class="inv-block">
+      <div class="inv-num">DEVIS N° ${String(inv.num).padStart(4,"0")}</div>
+      <div class="inv-meta">Date : ${inv.date}<br/>Validité : 15 jours</div>
+      <span class="badge">DEVIS</span>
+    </div>
+  </div>
+  <div class="parties">
+    <div class="pbox">
+      <div class="plabel">Établi par</div>
+      <div class="pname">${sName}</div>
+      ${inv.seller_name?`<div class="psub">Vendeur : ${inv.seller_name}</div>`:""}
+    </div>
+    <div class="pbox">
+      <div class="plabel">Client</div>
+      <div class="pname">${inv.client}</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Désignation</th>
+      <th style="text-align:center">Qté</th>
+      <th style="text-align:right">Prix unitaire</th>
+      <th style="text-align:right">Montant</th>
+    </tr></thead>
+    <tbody>${lignes}</tbody>
+  </table>
+  <div class="tot-wrap"><div class="tot">
+    <div class="tot-grand"><span>Total estimé</span><span>${fmtGNF(inv.total)}</span></div>
+  </div></div>
+  <div class="validity">Devis valable jusqu'au ${validStr}</div>
+  <div class="foot">
+    <div class="foot-left">
+      <div class="merci">Merci de votre confiance !</div>
+      <div class="note">Ce document est un devis estimatif. Il ne constitue pas une facture et n'engage aucune vente ni mouvement de stock. Les prix indiqués sont susceptibles d'évoluer après la date de validité.</div>
     </div>
     <div class="foot-right">
       <div class="sig-line"></div>
@@ -1438,28 +1628,35 @@ const UsersPage = ({ T, currentUser }) => {
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const [showPwd, setShowPwd] = useState(false);
-  const empty = {name:"",email:"",password:"",role:"Caissier",active:true};
+  const empty = {name:"",email:"",password:"",role:"Caissier",active:true,useCustomNav:false,customNav:[]};
   const [form, setForm] = useState(empty);
 
   useEffect(()=>{
     const load=async()=>{
       setLoading(true);
-      const {data,error}=await supabase.from("app_users").select("id,name,email,role,active,last_login,created_at").order("id");
+      const {data,error}=await supabase.from("app_users").select("id,name,email,role,active,last_login,created_at,custom_nav").order("id");
       if(!error&&data)setUsers(data);
       setLoading(false);
     };
     load();
   },[]);
 
-  const openEdit=(u)=>{setEditing(u.id);setForm({name:u.name,email:u.email,password:"",role:u.role,active:u.active});setErrMsg("");setShowPwd(false);setShowModal(true);};
+  const openEdit=(u)=>{
+    setEditing(u.id);
+    const hasCustom = Array.isArray(u.custom_nav) && u.custom_nav.length>0;
+    setForm({name:u.name,email:u.email,password:"",role:u.role,active:u.active,useCustomNav:hasCustom,customNav:hasCustom?u.custom_nav:(PERMISSIONS[u.role]?.nav||[])});
+    setErrMsg("");setShowPwd(false);setShowModal(true);
+  };
 
   const save=async()=>{
     if(!form.name||!form.email){setErrMsg("Nom et email obligatoires.");return;}
     if(!editing&&!form.password){setErrMsg("Mot de passe obligatoire.");return;}
     if(form.password&&form.password.length<4){setErrMsg("Mot de passe trop court (min. 4 caractères).");return;}
+    if(form.useCustomNav&&form.customNav.length===0){setErrMsg("Sélectionnez au moins un onglet, ou désactivez la personnalisation.");return;}
     setSaving(true); setErrMsg("");
+    const customNavValue = form.useCustomNav ? form.customNav : null;
     if(editing){
-      const updates={name:form.name,email:form.email.trim().toLowerCase(),role:form.role,active:form.active};
+      const updates={name:form.name,email:form.email.trim().toLowerCase(),role:form.role,active:form.active,custom_nav:customNavValue};
       if(form.password)updates.password=form.password;
       const {error}=await supabase.from("app_users").update(updates).eq("id",editing);
       if(error){setErrMsg("Erreur : "+error.message);setSaving(false);return;}
@@ -1467,7 +1664,7 @@ const UsersPage = ({ T, currentUser }) => {
     } else {
       const {data:ex}=await supabase.from("app_users").select("id").eq("email",form.email.trim().toLowerCase()).single();
       if(ex){setErrMsg("Cet email est déjà utilisé.");setSaving(false);return;}
-      const {data,error}=await supabase.from("app_users").insert([{name:form.name,email:form.email.trim().toLowerCase(),password:form.password,role:form.role,active:form.active}]).select("id,name,email,role,active,last_login,created_at");
+      const {data,error}=await supabase.from("app_users").insert([{name:form.name,email:form.email.trim().toLowerCase(),password:form.password,role:form.role,active:form.active,custom_nav:customNavValue}]).select("id,name,email,role,active,last_login,created_at,custom_nav");
       if(error){setErrMsg("Erreur : "+error.message);setSaving(false);return;}
       setUsers(prev=>[...prev,data[0]]);
     }
@@ -1486,6 +1683,15 @@ const UsersPage = ({ T, currentUser }) => {
     if(!window.confirm(`Supprimer ${u.name} ?`))return;
     const {error}=await supabase.from("app_users").delete().eq("id",u.id);
     if(!error)setUsers(prev=>prev.filter(x=>x.id!==u.id));
+  };
+
+  // Coche/décoche un onglet dans la sélection personnalisée (le tableau de bord reste toujours actif)
+  const toggleNavTab=(id)=>{
+    if(id==="dashboard")return;
+    setForm(f=>{
+      const has=f.customNav.includes(id);
+      return {...f,customNav: has? f.customNav.filter(x=>x!==id) : [...f.customNav,id]};
+    });
   };
 
   // Résumé des permissions pour chaque rôle
@@ -1538,6 +1744,11 @@ const UsersPage = ({ T, currentUser }) => {
                     <p className="font-bold text-sm" style={{color:T.text}}>{u.name}</p>
                     {u.id===currentUser.id&&<span className="text-xs" style={{color:T.accent}}>(vous)</span>}
                     <RoleBadge role={u.role}/>
+                    {Array.isArray(u.custom_nav)&&u.custom_nav.length>0&&(
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1" style={{background:`${T.accent}18`,color:T.accent}} title={u.custom_nav.map(id=>ALL_NAV.find(n=>n.id===id)?.label||id).join(", ")}>
+                        <Icon name="key" size={10}/> Accès personnalisé
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs" style={{color:T.textMuted}}>{u.email}</p>
                   {u.last_login&&<p className="text-xs" style={{color:T.textMuted}}>Dernière connexion : {new Date(u.last_login).toLocaleString("fr-FR")}</p>}
@@ -1575,13 +1786,45 @@ const UsersPage = ({ T, currentUser }) => {
                   const colors={Administrateur:"#fca5a5",Caissier:"#93c5fd","Gestionnaire Stock":"#d8b4fe"};
                   const c=colors[role];
                   return(
-                    <button key={role} onClick={()=>setForm(f=>({...f,role}))} className="p-2 rounded-xl text-xs font-semibold transition-all text-center" style={{background:form.role===role?`${c}20`:T.input,border:`2px solid ${form.role===role?c:T.inputBorder}`,color:form.role===role?c:T.textMuted}}>
+                    <button key={role} onClick={()=>setForm(f=>({...f,role,customNav:PERMISSIONS[role]?.nav||[]}))} className="p-2 rounded-xl text-xs font-semibold transition-all text-center" style={{background:form.role===role?`${c}20`:T.input,border:`2px solid ${form.role===role?c:T.inputBorder}`,color:form.role===role?c:T.textMuted}}>
                       {role}<br/><span className="font-normal text-xs opacity-70">{roleDesc[role].split(" ").slice(0,3).join(" ")}...</span>
                     </button>
                   );
                 })}
               </div>
               <p className="text-xs mt-2 px-3 py-2 rounded-xl" style={{background:T.rowHover,color:T.textMuted}}>{roleDesc[form.role]}</p>
+            </div>
+
+            {/* Personnalisation des onglets accessibles, indépendamment du rôle */}
+            <div className="rounded-xl p-3" style={{background:T.input,border:`1px solid ${T.inputBorder}`}}>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wider flex-1" style={{color:T.textSub}}>Onglets personnalisés pour cet utilisateur</span>
+                <button onClick={()=>setForm(f=>({...f,useCustomNav:!f.useCustomNav,customNav:(!f.useCustomNav&&f.customNav.length===0)?(PERMISSIONS[f.role]?.nav||[]):f.customNav}))} className="relative w-10 h-5 rounded-full flex-shrink-0" style={{background:form.useCustomNav?T.accent:"#374151"}}>
+                  <div className="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all" style={{left:form.useCustomNav?"22px":"2px"}}/>
+                </button>
+              </div>
+              {!form.useCustomNav ? (
+                <p className="text-xs mt-2" style={{color:T.textMuted}}>Désactivé : l'utilisateur voit les onglets par défaut de son rôle ({(PERMISSIONS[form.role]?.nav||[]).length} onglets).</p>
+              ) : (
+                <>
+                  <p className="text-xs mt-2 mb-2" style={{color:T.textMuted}}>Cochez les onglets auxquels cet utilisateur aura accès (remplace les permissions du rôle).</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_NAV.map(item=>{
+                      const checked = item.id==="dashboard" || form.customNav.includes(item.id);
+                      const locked = item.id==="dashboard";
+                      return(
+                        <button key={item.id} type="button" onClick={()=>toggleNavTab(item.id)} disabled={locked} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-all" style={{background:checked?`${T.accent}18`:T.card,border:`1px solid ${checked?T.accent+"55":T.inputBorder}`,color:checked?T.accent:T.textMuted,opacity:locked?0.8:1,cursor:locked?"default":"pointer"}}>
+                          <span className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0" style={{background:checked?T.accent:"transparent",border:checked?"none":`1px solid ${T.inputBorder}`}}>
+                            {checked&&<Icon name="check" size={11}/>}
+                          </span>
+                          <Icon name={item.icon} size={13}/>
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{background:T.input}}>
               <span className="text-xs font-semibold uppercase tracking-wider flex-1" style={{color:T.textSub}}>Compte actif</span>
@@ -2071,7 +2314,7 @@ const ALL_NAV = [
 ];
 
 const Sidebar = ({ active, setActive, user, onLogout, collapsed, T, shopSettings }) => {
-  const nav = ALL_NAV.filter(item => canAccess(user.role, item.id));
+  const nav = ALL_NAV.filter(item => canAccess(user, item.id));
   const logo = shopSettings?.logo || "🏗️";
   const shopName = shopSettings?.shop_name || "BOUMAYAH ET FILS";
   return (
@@ -2081,7 +2324,7 @@ const Sidebar = ({ active, setActive, user, onLogout, collapsed, T, shopSettings
           ? <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:`linear-gradient(135deg,${T.accent},${T.accent}bb)`}}>{logo}</div>
           : <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{background:`linear-gradient(135deg,${T.accent},${T.accent}bb)`}}>{logo}</div>
-              <div><p className="font-black text-xs leading-tight" style={{color:T.text}}>{shopName.toUpperCase().slice(0,14)}</p><p className="text-xs font-medium" style={{color:"#22c55e"}}>Gestion</p></div>
+              <div><p className="font-black text-xs leading-tight" style={{color:"#ffffff"}}>{shopName.toUpperCase().slice(0,14)}</p><p className="text-xs font-medium" style={{color:"#22c55e"}}>Gestion</p></div>
             </div>
         }
       </div>
@@ -2096,7 +2339,7 @@ const Sidebar = ({ active, setActive, user, onLogout, collapsed, T, shopSettings
       <div className="px-2 py-3 border-t" style={{borderColor:T.headerBorder}}>
         {!collapsed
           ? <div className="px-3 py-2 rounded-xl" style={{background:T.userCard}}>
-              <p className="text-xs font-semibold truncate" style={{color:T.text}}>{user.name}</p>
+              <p className="text-xs font-semibold truncate" style={{color:"#ffffff"}}>{user.name}</p>
               <RoleBadge role={user.role}/>
               <button onClick={onLogout} className="mt-2 flex items-center gap-1 text-xs hover:text-red-400 transition-colors" style={{color:T.textMuted}}><Icon name="logout" size={12}/> Déconnexion</button>
             </div>
@@ -2128,7 +2371,7 @@ export default function App() {
 
   // Si le rôle n'a pas accès à la page active → rediriger vers dashboard
   useEffect(() => {
-    if (user && !canAccess(user.role, active)) setActive("dashboard");
+    if (user && !canAccess(user, active)) setActive("dashboard");
   }, [user, active]);
 
   // Charger les données depuis Supabase
@@ -2183,9 +2426,9 @@ export default function App() {
       </div>
     );
     // Vérifier l'accès au rôle avant d'afficher la page
-    if (!canAccess(user.role, active)) return <AccessDenied T={T} role={user.role}/>;
+    if (!canAccess(user, active)) return <AccessDenied T={T} role={user.role}/>;
     switch (active) {
-      case "dashboard":  return <Dashboard products={products} sales={sales} clients={clients} expenses={expenses} T={T} user={user} shopSettings={shopSettings}/>;
+      case "dashboard":  return <Dashboard products={products} sales={sales} clients={clients} expenses={expenses} T={T} user={user} shopSettings={shopSettings} themeName={themeName}/>;
       case "products":   return <ProductsPage products={products} setProducts={setProducts} T={T} userRole={user.role}/>;
       case "stock":      return <StockPage products={products} setProducts={setProducts} T={T} userRole={user.role} user={user}/>;
       case "sales":      return <SalesPage products={products} setProducts={setProducts} sales={sales} setSales={setSales} clients={clients} setClients={setClients} T={T} userRole={user.role} shopSettings={shopSettings} user={user}/>;
