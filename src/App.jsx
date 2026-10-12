@@ -438,7 +438,8 @@ const LoginPage = ({ onLogin }) => {
         .lg-card{display:flex;width:100%;max-width:880px;min-height:540px;background:#fff;border-radius:22px;overflow:hidden;box-shadow:0 24px 60px rgba(249,115,22,.16);position:relative;z-index:1}
         .lg-side{flex:1;position:relative;overflow:hidden;background:linear-gradient(145deg,#fb923c 0%,#f97316 55%,#ea580c 100%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 32px}
         .lg-main{flex:1.1;display:flex;flex-direction:column;justify-content:center;padding:44px 48px}
-        @media(max-width:760px){.lg-side{display:none}.lg-main{padding:32px 24px}}
+        .lg-mob{display:none}
+        @media(max-width:760px){.lg-side{display:none}.lg-main{padding:32px 24px}.lg-mob{display:flex}}
       `}</style>
       <div style={{ position: "absolute", top: -90, right: -70, width: 260, height: 260, borderRadius: "50%", background: "#fdba74", opacity: .55 }}/>
       <div style={{ position: "absolute", bottom: -110, left: -80, width: 300, height: 300, borderRadius: "50%", background: "#fed7aa", opacity: .7 }}/>
@@ -457,6 +458,10 @@ const LoginPage = ({ onLogin }) => {
           </div>
         </div>
         <div className="lg-main">
+          <div className="lg-mob" style={{ flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 22 }}>
+            <ShopLogo url={saved.logo_url} size={64} accent="#f97316" radius={16}/>
+            <span style={{ fontWeight: 900, fontSize: 18, color: "#1f2937", textAlign: "center" }}>{saved.shop_name || "MOGESTOCK"}</span>
+          </div>
           <div style={{ textAlign: "center", marginBottom: 26 }}>
             <h2 style={{ fontSize: 30, fontWeight: 900, color: "#f97316" }}>Connexion</h2>
             <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 6 }}>Entrez vos identifiants pour accéder à l'application</p>
